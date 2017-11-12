@@ -6,6 +6,8 @@ import urllib.parse
 from commit2db import MysqlConnection
 
 YEAR_URL = 'https://www.basketball-reference.com/draft/NBA_{year}.html'
+HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2171.95 Safari/537.36'}
 
 
 def get_player_info(soup: Tag) -> dict:
@@ -20,15 +22,20 @@ def get_player_info(soup: Tag) -> dict:
   height, weight = re.findall(r'\((\d+)cm.*?(\d+)kg', meta_data)[0]
   player_data['position'] = re.findall(r'Position\:?\s+(\w+\s?\w+)', meta_data)[0]
   player_data['shoots'] = re.findall(r'Shoots\:?\s+(\w+\s?\w+)', meta_data)[0]
-  player_data['team'] = re.findall(r'Team\:?\s+(\w+\s?\w+)', meta_data)[0]
-  player_data['college'] = re.findall(r'College\:?\s+(\w+\s?\w+)', meta_data)[0]
   player_data['height'] = int(height)
   player_data['weight'] = int(weight)
+  
+  # College data is hard to use regex...
+  if 'College' in meta_data:
+    all_links = [x for x in meta_soup.find_all('a')]
+    result = list(filter(lambda x: 'college' in x['href'], all_links))[0]
+    player_data['college'] = result.get_text()
   
   # some of them just don't have following data,
   # so...
   try:
     player_data['born'] = meta_soup.find(id='necro-birth')['data-birth']
+    player_data['team'] = re.findall(r'Team\:?\s+(\w+\s?\w+)', meta_data)[0]
     # Easily broke here, pay attention to index
     player_data['nba_debut'] = all_paragraph[-2].a.get_text()
   except Exception:
@@ -86,7 +93,7 @@ def get_college_data(soup: Tag) -> dict:
 
 
 def get_person(url: str) -> tuple:
-  html_page = requests.get(url)
+  html_page = requests.get(url, headers=HEADERS)
   html_page = html_page.content.decode('utf-8')
   drink_soup = BeautifulSoup(html_page, 'html.parser')
   player_info = get_player_info(drink_soup)
@@ -97,7 +104,7 @@ def get_person(url: str) -> tuple:
 
 def get_person_list_by_year(year: int) -> list:
   url = YEAR_URL.format(year=year)
-  year_html = requests.get(url).content.decode('utf-8')
+  year_html = requests.get(url, headers=HEADERS).content.decode('utf-8')
   year_soup = BeautifulSoup(year_html, 'html.parser')
   year_soup = year_soup.find(id='stats')
   player_list = year_soup.select('tbody > tr')
@@ -118,16 +125,15 @@ def get_person_list_by_year(year: int) -> list:
 
 
 if __name__ == '__main__':
-  # get_person('https://www.basketball-reference.com/players/d/dunnkr01.html')
   mysql = MysqlConnection()
-  draft_year = 2016
   current_ID = 0
-  person_list = get_person_list_by_year(draft_year)
-  person_list = filter(None, person_list)
-  for person_url in person_list:
-    player_info, career_data, college_data = get_person(person_url)
-    player_info['draft_year'] = draft_year
-    player_info['ID'] = current_ID
-    print(player_info)
-    mysql.save_to_db(player_info, career_data, college_data)
-    current_ID += 1
+  for draft_year in range(2012, 2017):
+    person_list = get_person_list_by_year(draft_year)
+    person_list = filter(None, person_list)
+    for person_url in person_list:
+      player_info, career_data, college_data = get_person(person_url)
+      player_info['draft_year'] = draft_year
+      player_info['ID'] = current_ID
+      print(player_info)
+      mysql.save_to_db(player_info, career_data, college_data)
+      current_ID += 1
