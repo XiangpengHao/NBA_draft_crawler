@@ -10,6 +10,10 @@ HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2171.95 Safari/537.36'}
 
 
+def regex_wrapper(found: list) -> str:
+  return found[0] if found else ''
+
+
 def get_player_info(soup: Tag) -> dict:
   meta_soup = soup.find(id='meta')
   player_data = {}
@@ -19,9 +23,9 @@ def get_player_info(soup: Tag) -> dict:
   
   # The original html is messy, sorry for the regex
   meta_data = meta_soup.get_text().replace('\n', ' ')
-  height, weight = re.findall(r'\((\d+)cm.*?(\d+)kg', meta_data)[0]
-  player_data['position'] = re.findall(r'Position\:?\s+(\w+\s?\w+)', meta_data)[0]
-  player_data['shoots'] = re.findall(r'Shoots\:?\s+(\w+\s?\w+)', meta_data)[0]
+  height, weight = regex_wrapper(re.findall(r'\((\d+)cm.*?(\d+)kg', meta_data))
+  player_data['position'] = regex_wrapper(re.findall(r'Position\:?\s+(\w+\s?\w+)', meta_data))
+  player_data['shoots'] = regex_wrapper(re.findall(r'Shoots\:?\s+(\w+\s?\w+)', meta_data))
   player_data['height'] = int(height)
   player_data['weight'] = int(weight)
   
@@ -35,7 +39,7 @@ def get_player_info(soup: Tag) -> dict:
   # so...
   try:
     player_data['born'] = meta_soup.find(id='necro-birth')['data-birth']
-    player_data['team'] = re.findall(r'Team\:?\s+(\w+\s?\w+)', meta_data)[0]
+    player_data['team'] = regex_wrapper(re.findall(r'Team\:?\s+(\w+\s?\w+)', meta_data))
     # Easily broke here, pay attention to index
     player_data['nba_debut'] = all_paragraph[-2].a.get_text()
   except Exception:
@@ -75,14 +79,17 @@ def get_college_data(soup: Tag) -> dict:
   # I don't understand why they first comment the section
   # then uncomment it in runtime. Reduce rendering time?
   all_comments = soup.findAll(text=lambda x: isinstance(x, Comment))
-  comment = list(filter(lambda x: 'College Table' in x, all_comments))[0]
+  try:
+    comment = list(filter(lambda x: 'College Table' in x, all_comments))[0]
+  except IndexError:
+    raise IndexError
   comment = BeautifulSoup(comment, 'html.parser')
   career_tr = comment.select('tfoot > tr')[0]
   
   def get_each_season(tr_soup: Tag):
     season_data = {}
     season_data['season'] = tr_soup.th.get_text()
-    all_td = [str2float(x.get_text()) for x in tr_soup.findAll('td')][-7:]
+    all_td = [str2float(x.get_text(), 0) for x in tr_soup.findAll('td')][-7:]
     all_columns = ['FG', '3P', 'FT', 'MP', 'PTS', 'TRB', 'AST']
     for index, column in enumerate(all_columns):
       season_data[column] = all_td[index]
@@ -124,16 +131,33 @@ def get_person_list_by_year(year: int) -> list:
   return player_list
 
 
+def test(url: str):
+  mysql = MysqlConnection()
+  try:
+    player_info, career_data, college_data = get_person(url)
+  except IndexError:
+    print("No college data")
+    return
+  player_info['draft_year'] = 9999
+  player_info['ID'] = 999395
+  print(player_info, career_data, college_data)
+  mysql.save_to_db(player_info, career_data, college_data)
+
+
 if __name__ == '__main__':
+  # test('https://www.basketball-reference.com/players/l/ledori01.html')
   mysql = MysqlConnection()
   current_ID = 0
   for draft_year in range(2012, 2017):
     person_list = get_person_list_by_year(draft_year)
     person_list = filter(None, person_list)
     for person_url in person_list:
-      player_info, career_data, college_data = get_person(person_url)
+      try:
+        player_info, career_data, college_data = get_person(person_url)
+      except IndexError:
+        continue
       player_info['draft_year'] = draft_year
       player_info['ID'] = current_ID
-      print(player_info)
+      print(person_url)
       mysql.save_to_db(player_info, career_data, college_data)
       current_ID += 1
