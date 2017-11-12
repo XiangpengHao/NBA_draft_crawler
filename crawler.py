@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup, Comment, Tag
 import urllib.parse
 
-import commit2db
+from commit2db import MysqlConnection
 
 YEAR_URL = 'https://www.basketball-reference.com/draft/NBA_{year}.html'
 
@@ -28,7 +28,7 @@ def get_player_info(soup: Tag) -> dict:
   # some of them just don't have following data,
   # so...
   try:
-    player_data['birth'] = meta_soup.find(id='necro-birth')['data-birth']
+    player_data['born'] = meta_soup.find(id='necro-birth')['data-birth']
     # Easily broke here, pay attention to index
     player_data['nba_debut'] = all_paragraph[-2].a.get_text()
   except Exception:
@@ -59,8 +59,8 @@ def get_career_data(soup: Tag) -> dict:
   player_career['FG3'] = career_data[11]
   player_career['FT'] = career_data[13]
   player_career['eFG'] = career_data[15]
-  player_career['per'] = career_data[17]
-  player_career['ws'] = career_data[19]
+  player_career['PER'] = career_data[17]
+  player_career['WS'] = career_data[19]
   return player_career
 
 
@@ -119,8 +119,15 @@ def get_person_list_by_year(year: int) -> list:
 
 if __name__ == '__main__':
   # get_person('https://www.basketball-reference.com/players/d/dunnkr01.html')
-  person_list = get_person_list_by_year(2016)
+  mysql = MysqlConnection()
+  draft_year = 2016
+  current_ID = 0
+  person_list = get_person_list_by_year(draft_year)
   person_list = filter(None, person_list)
   for person_url in person_list:
     player_info, career_data, college_data = get_person(person_url)
-    commit2db.save_to_db(player_info, career_data, college_data)
+    player_info['draft_year'] = draft_year
+    player_info['ID'] = current_ID
+    print(player_info)
+    mysql.save_to_db(player_info, career_data, college_data)
+    current_ID += 1
