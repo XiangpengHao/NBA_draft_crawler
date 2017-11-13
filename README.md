@@ -1,9 +1,9 @@
 ### NBA Draft :jack_o_lantern:
 Crawling data from https://www.basketball-reference.com/draft/
 
-- `DDL.sql` defined the database schema, I use MySQL here but theoretically it works in most common databases.
-- `requirements.txt` defined the `python` package I use.
-  - `beautifulsoup` to parse `html` data
+- `DDL.sql` defined the database schema, I use MySQL dialect here but theoretically it works in most common databases.
+- `requirements.txt` defined the Python packages I use.
+  - `beautifulsoup` to parse html data
   - `requests` to send http requests
   - `pymysql` to interact with database
   - Life is short, I use Python : )

@@ -24,7 +24,7 @@ def get_player_info(soup: Tag) -> dict:
   # The original html is messy, sorry for the regex
   meta_data = meta_soup.get_text().replace('\n', ' ')
   height, weight = regex_wrapper(re.findall(r'\((\d+)cm.*?(\d+)kg', meta_data))
-  player_data['position'] = regex_wrapper(re.findall(r'Position\:?\s+(\w+\s?\w+)', meta_data))
+  player_data['position'] = regex_wrapper(re.findall(r'Position\:?\s+(.*?)\s+▪', meta_data))
   player_data['shoots'] = regex_wrapper(re.findall(r'Shoots\:?\s+(\w+\s?\w+)', meta_data))
   player_data['height'] = int(height)
   player_data['weight'] = int(weight)
@@ -43,7 +43,7 @@ def get_player_info(soup: Tag) -> dict:
     # Easily broke here, pay attention to index
     player_data['nba_debut'] = all_paragraph[-2].a.get_text()
   except Exception:
-    print("Well, well...")
+    print("He doesn't have team or nba_debut...")
   return player_data
 
 
@@ -58,20 +58,23 @@ def str2float(string: str, default=None):
 
 
 def get_career_data(soup: Tag) -> dict:
-  career_data = soup.find('div', {'class': 'stats_pullout'})
-  career_data = career_data.select('div > p')[2:]
-  career_data = [str2float(x.get_text(), 0) for x in career_data]
-  player_career = {}
-  player_career['G'] = career_data[1]
-  player_career['PTS'] = career_data[3]
-  player_career['TRB'] = career_data[5]
-  player_career['AST'] = career_data[7]
-  player_career['FG'] = career_data[9]
-  player_career['FG3'] = career_data[11]
-  player_career['FT'] = career_data[13]
-  player_career['eFG'] = career_data[15]
-  player_career['PER'] = career_data[17]
-  player_career['WS'] = career_data[19]
+  try:
+    career_data = soup.find('div', {'class': 'stats_pullout'})
+    career_data = career_data.select('div > p')[2:]
+    career_data = [str2float(x.get_text(), 0) for x in career_data]
+    player_career = {}
+    player_career['G'] = career_data[1]
+    player_career['PTS'] = career_data[3]
+    player_career['TRB'] = career_data[5]
+    player_career['AST'] = career_data[7]
+    player_career['FG'] = career_data[9]
+    player_career['FG3'] = career_data[11]
+    player_career['FT'] = career_data[13]
+    player_career['eFG'] = career_data[15]
+    player_career['PER'] = career_data[17]
+    player_career['WS'] = career_data[19]
+  except Exception:
+    raise LookupError
   return player_career
 
 
@@ -82,7 +85,7 @@ def get_college_data(soup: Tag) -> dict:
   try:
     comment = list(filter(lambda x: 'College Table' in x, all_comments))[0]
   except IndexError:
-    raise IndexError
+    raise LookupError
   comment = BeautifulSoup(comment, 'html.parser')
   career_tr = comment.select('tfoot > tr')[0]
   
@@ -104,8 +107,14 @@ def get_person(url: str) -> tuple:
   html_page = html_page.content.decode('utf-8')
   drink_soup = BeautifulSoup(html_page, 'html.parser')
   player_info = get_player_info(drink_soup)
-  career_data = get_career_data(drink_soup)
-  college_data = get_college_data(drink_soup)
+  try:
+    career_data = get_career_data(drink_soup)
+  except LookupError:
+    career_data = {}
+  try:
+    college_data = get_college_data(drink_soup)
+  except LookupError:
+    college_data = {}
   return player_info, career_data, college_data
 
 
@@ -116,16 +125,13 @@ def get_person_list_by_year(year: int) -> list:
   year_soup = year_soup.find(id='stats')
   player_list = year_soup.select('tbody > tr')
   
-  def handle_one_player(player: Tag) -> str:
+  def handle_one_player(player: Tag) -> tuple:
     try:
-      college_name = player.find('td', {'data-stat': 'college_name'}).get_text()
-      one_attribute = player.find('td', {'data-stat': 'g'}).get_text()
-    except AttributeError:
-      return ''
-    if not college_name or not one_attribute:
-      return ''
-    url = player.find('td', {'data-stat': 'player'}).a['href']
-    return urllib.parse.urljoin(YEAR_URL, url)
+      pk = player.find('td', {'data-stat': 'pick_overall'}).get_text()
+      url = player.find('td', {'data-stat': 'player'}).a['href']
+    except:
+      return ()
+    return urllib.parse.urljoin(YEAR_URL, url), int(pk)
   
   player_list = [handle_one_player(x) for x in player_list]
   return player_list
@@ -147,17 +153,13 @@ def test(url: str):
 if __name__ == '__main__':
   # test('https://www.basketball-reference.com/players/l/ledori01.html')
   mysql = MysqlConnection()
-  current_ID = 0
   for draft_year in range(2012, 2017):
     person_list = get_person_list_by_year(draft_year)
     person_list = filter(None, person_list)
-    for person_url in person_list:
-      try:
-        player_info, career_data, college_data = get_person(person_url)
-      except IndexError:
-        continue
+    for person_url, pk in person_list:
+      player_info, career_data, college_data = get_person(person_url)
       player_info['draft_year'] = draft_year
-      player_info['ID'] = current_ID
+      player_info['pk'] = pk
+      player_info['ID'] = draft_year * 100 + pk
       print(person_url)
       mysql.save_to_db(player_info, career_data, college_data)
-      current_ID += 1

@@ -20,21 +20,21 @@ class MysqlConnection():
     return mysql_conn
   
   def save_to_db(self, player_info: dict, career_data: dict, college_data: dict):
-    self.player_id = player_info.get('ID', '')
-    self.save_player_info(player_info)
-    self.save_career_data(career_data)
-    self.save_player_college(college_data)
+    self.player_id = player_info.get('ID')
+    if player_info:    self.save_player_info(player_info)
+    if career_data: self.save_career_data(career_data)
+    if college_data: self.save_player_college(college_data)
     self.mysql_conn.commit()
   
   def save_player_college(self, college_data: dict):
-    sql = "insert into player_college VALUE (%s,%s,%s,%s,%s,%s,%s,%s)"
+    sql = "INSERT INTO player_college VALUE (%s,%s,%s,%s,%s,%s,%s,%s)"
     self.cursor.execute(sql, (
       self.player_id, college_data.get('FG', 0), college_data.get('3P', 0), college_data.get('FT', 0),
       college_data.get('MP', 0), college_data.get('PTS', 0), college_data.get('TRB', 0), college_data.get('AST', 0)
     ))
   
   def save_career_data(self, career_data: dict):
-    sql = "insert into player_career values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+    sql = "INSERT INTO player_career VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     self.cursor.execute(sql, (
       self.player_id, career_data.get('G', 0), career_data.get('PTS', 0), career_data.get('TRB', 0),
       career_data.get('AST', 0),
@@ -43,8 +43,8 @@ class MysqlConnection():
     ))
   
   def save_player_info(self, player_info: dict):
-    sql = "insert into player_info(ID,name,weight,height,position,shoots,born,college,nba_debut,draft_year,team)" \
-          " values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+    sql = "INSERT INTO player_info(ID,name,weight,height,position,shoots,born,college,nba_debut,draft_year,team)" \
+          " VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     self.cursor.execute(sql, (
       self.player_id, player_info.get('name', ''), player_info.get('weight', 0), player_info.get('height', 0),
       player_info.get('position', ''), player_info.get('shoots', ''), player_info.get('born', ''),

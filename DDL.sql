@@ -11,7 +11,8 @@ CREATE TABLE player_info
   college    TEXT NULL,
   nba_debut  TEXT NULL,
   draft_year INT  NULL,
-  team       TEXT NULL
+  team       TEXT NULL,
+  pk         INT  NULL
 );
 
 CREATE TABLE player_career
